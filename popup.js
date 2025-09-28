@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', function() {
     let profileData;
+    let contactOutEmails = [];
 
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
         chrome.scripting.executeScript({
@@ -10,8 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 profileData = results[0].result;
                 document.getElementById('name').textContent = profileData.name;
                 document.getElementById('title').textContent = profileData.title;
-
-
                 document.getElementById('photo').src = profileData.photo;
                 document.getElementById('username').textContent = profileData.username;
 
@@ -25,6 +24,44 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 document.getElementById('deck-data').textContent = JSON.stringify(deckPayload, null, 2);
+
+                chrome.storage.sync.get(['contactOutApiKey'], function(result) {
+                    const contactOutApiKey = result.contactOutApiKey;
+                    if (contactOutApiKey) {
+                        chrome.runtime.sendMessage(
+                            { 
+                                action: 'getContactOutData', 
+                                data: { 
+                                    username: profileData.username, 
+                                    apiKey: contactOutApiKey 
+                                }
+                            },
+                            (response) => {
+                                const emailsList = document.getElementById('emails');
+                                emailsList.innerHTML = ''; // Clear previous emails
+                                if (response.success) {
+                                    contactOutEmails = response.data.emails || [];
+                                    if (contactOutEmails.length > 0) {
+                                        contactOutEmails.forEach(email => {
+                                            const li = document.createElement('li');
+                                            li.textContent = email.address;
+                                            emailsList.appendChild(li);
+                                        });
+                                    } else {
+                                        const li = document.createElement('li');
+                                        li.textContent = 'No emails found.';
+                                        emailsList.appendChild(li);
+                                    }
+                                } else {
+                                    const li = document.createElement('li');
+                                    li.textContent = 'Error fetching emails.';
+                                    emailsList.appendChild(li);
+                                    console.error('Error getting ContactOut data:', response.error);
+                                }
+                            }
+                        );
+                    }
+                });
             }
         });
     });
@@ -69,7 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const imageUrl = profileData.photo;
 
                 const socialsPayload = {
-                    mails: [],
+                    mails: contactOutEmails.map(email => ({ mail: email.address, valid: true, personal: false })),
                     phones: [],
                     socials: {
                         facebook: null,
